@@ -2,6 +2,7 @@
 import Head from "next/head";
 import { Plus, Grid3x3, List, Search } from "lucide-react";
 import Sidebar from "@/components/SideBar";
+import Link from "next/link";
 
 export default function Dashboard() {
   return (
@@ -21,12 +22,12 @@ export default function Dashboard() {
                   </h1>
                   <p className="text-slate-600 mt-1">Manage and organize your files</p>
                 </div>
-                <a href="/upload">
+                <Link href="/upload">
                   <button className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl px-4 py-2 rounded-md h-10 font-medium text-sm transition-all duration-300">
                     <Plus className="w-4 h-4 mr-2" />
                     Upload Files
                   </button>
-                </a>
+                </Link>
               </div>
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

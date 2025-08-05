@@ -2,6 +2,7 @@ import Head from "next/head";
 import Sidebar from "@/components/SideBar";
 import { useRef, useState } from "react";
 import { ArrowLeft, FolderOpen, Image, FileText, Video, Music } from "lucide-react";
+import Link from "next/link";
 
 export default function Upload() {
   const fileInputRef = useRef(null);
@@ -27,11 +28,11 @@ export default function Upload() {
           <div className="p-6 lg:p-8">
             <div className="max-w-4xl mx-auto space-y-8">
               <div className="flex items-center gap-4">
-                <a href="/dashboard">
+                <Link href="/dashboard">
                   <button className="border h-10 w-10 rounded-md hover:bg-white/60">
                     <ArrowLeft className="w-4 h-4 mx-auto" />
                   </button>
-                </a>
+                </Link>
                 <div>
                   <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
                     Upload Files
