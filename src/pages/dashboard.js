@@ -10,7 +10,7 @@ export default function Dashboard() {
   return (
     <>
       <Head>
-        <title>CloudVault | Dashboard</title>
+        <title>SecureVault | Dashboard</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
       <div className="flex">

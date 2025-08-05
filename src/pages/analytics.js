@@ -28,7 +28,7 @@ export default function Analytics() {
   return (
     <>
       <Head>
-        <title>CloudVault | Analytics</title>
+        <title>SecureVault | Analytics</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
       <div className="flex">

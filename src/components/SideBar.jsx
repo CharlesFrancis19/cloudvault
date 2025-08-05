@@ -17,7 +17,7 @@ export default function Sidebar({ active = '', open = false, onClose = () => {} 
       {/* Mobile Sidebar Drawer */}
       <div className={`fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out md:hidden ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex justify-between items-center p-4 border-b border-gray-200">
-          <h2 className="font-bold text-lg">CloudVault</h2>
+          <h2 className="font-bold text-lg">SecureVault</h2>
           <button onClick={onClose}><X className="w-5 h-5 text-gray-600" /></button>
         </div>
         <SidebarContent active={active} />
@@ -35,7 +35,7 @@ function SidebarContent({ active }) {
             <Cloud className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h2 className="font-bold text-xl text-slate-900">CloudVault</h2>
+            <h2 className="font-bold text-xl text-slate-900">SecureVault</h2>
             <p className="text-xs text-slate-500">Premium Storage</p>
           </div>
         </div>

@@ -20,7 +20,7 @@ export default function Upload() {
   return (
     <>
       <Head>
-        <title>CloudVault | Upload</title>
+        <title>SecureVault | Upload</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
       <div className="flex">
@@ -77,7 +77,7 @@ export default function Upload() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 p-6">
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-6 p-6">
                   {[{ label: "Images", icon: Image, desc: "PNG, JPG, GIF" }, { label: "Documents", icon: FileText, desc: "PDF, DOC, TXT" }, { label: "Videos", icon: Video, desc: "MP4, AVI, MOV" }, { label: "Audio", icon: Music, desc: "MP3, WAV, AAC" }].map(({ label, icon: Icon, desc }, i) => (
                     <div key={i} className="text-center">
                       <div className="w-12 h-12 mx-auto mb-3 bg-white rounded-lg flex items-center justify-center shadow-sm border border-slate-200">
