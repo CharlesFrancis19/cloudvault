@@ -1,16 +1,16 @@
+// === MOBILE-SUPPORTED UPLOAD.JSX (with Sidebar Toggle) ===
 import Head from "next/head";
 import Sidebar from "@/components/SideBar";
 import { useRef, useState } from "react";
-import { ArrowLeft, FolderOpen, Image, FileText, Video, Music } from "lucide-react";
+import { ArrowLeft, FolderOpen, Image, FileText, Video, Music, Menu } from "lucide-react";
 import Link from "next/link";
 
 export default function Upload() {
   const fileInputRef = useRef(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const handleButtonClick = () => {
-    fileInputRef.current?.click();
-  };
+  const handleButtonClick = () => fileInputRef.current?.click();
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files);
@@ -21,13 +21,20 @@ export default function Upload() {
     <>
       <Head>
         <title>CloudVault | Upload</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
       <div className="flex">
-        <Sidebar active="upload" />
-        <main className="flex-1 overflow-auto ml-64">
-          <div className="p-6 lg:p-8">
+        <Sidebar active="upload" open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <main className="flex-1 overflow-auto md:ml-64">
+          <div className="px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center justify-between mb-4 md:hidden">
+              <h1 className="text-xl font-bold">Upload</h1>
+              <button onClick={() => setSidebarOpen(true)}>
+                <Menu className="w-6 h-6 text-slate-600" />
+              </button>
+            </div>
             <div className="max-w-4xl mx-auto space-y-8">
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <Link href="/dashboard">
                   <button className="border h-10 w-10 rounded-md hover:bg-white/60">
                     <ArrowLeft className="w-4 h-4 mx-auto" />
@@ -41,7 +48,6 @@ export default function Upload() {
                 </div>
               </div>
 
-              {/* Upload Zone */}
               <div className="rounded-lg glass-effect border-0 shadow-lg">
                 <div className="bg-slate-50 p-12 text-center">
                   <div className="w-24 h-24 mx-auto mb-8 rounded-full flex items-center justify-center border-4 border-slate-200 bg-white">
@@ -54,7 +60,6 @@ export default function Upload() {
                   <h2 className="text-2xl font-bold text-slate-900 mb-3">Upload your files</h2>
                   <p className="text-lg text-slate-600 mb-6">Drag and drop files or click below</p>
 
-                  {/* Hidden File Input */}
                   <input
                     type="file"
                     multiple
@@ -72,8 +77,7 @@ export default function Upload() {
                   </button>
                 </div>
 
-                {/* File Types */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 p-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 p-6">
                   {[{ label: "Images", icon: Image, desc: "PNG, JPG, GIF" }, { label: "Documents", icon: FileText, desc: "PDF, DOC, TXT" }, { label: "Videos", icon: Video, desc: "MP4, AVI, MOV" }, { label: "Audio", icon: Music, desc: "MP3, WAV, AAC" }].map(({ label, icon: Icon, desc }, i) => (
                     <div key={i} className="text-center">
                       <div className="w-12 h-12 mx-auto mb-3 bg-white rounded-lg flex items-center justify-center shadow-sm border border-slate-200">
@@ -90,7 +94,6 @@ export default function Upload() {
                   <p>Supported formats: Images, Documents, Videos, Audio files</p>
                 </div>
 
-                {/* Preview Selected Files */}
                 {selectedFiles.length > 0 && (
                   <div className="px-6 pb-6">
                     <h3 className="text-lg font-semibold text-slate-700 mb-2">Selected Files:</h3>

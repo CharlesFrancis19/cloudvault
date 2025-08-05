@@ -1,21 +1,30 @@
-
 import Head from "next/head";
-import { Plus, Grid3x3, List, Search } from "lucide-react";
+import { Plus, Grid3x3, List, Search, Menu } from "lucide-react";
 import Sidebar from "@/components/SideBar";
 import Link from "next/link";
+import { useState } from "react";
 
 export default function Dashboard() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <>
       <Head>
         <title>CloudVault | Dashboard</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
       <div className="flex">
-        <Sidebar active="dashboard" />
-        <main className="flex-1 overflow-auto ml-64">
-          <div className="p-6 lg:p-8">
+        <Sidebar active="dashboard" open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <main className="flex-1 overflow-auto md:ml-64 w-full">
+          <div className="px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center justify-between mb-4 md:hidden">
+              <h1 className="text-xl font-bold">Dashboard</h1>
+              <button onClick={() => setSidebarOpen(true)}>
+                <Menu className="w-6 h-6 text-slate-600" />
+              </button>
+            </div>
             <div className="max-w-7xl mx-auto space-y-8">
-              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
                 <div>
                   <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
                     My Files
@@ -29,8 +38,7 @@ export default function Dashboard() {
                   </button>
                 </Link>
               </div>
-
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {["Total Files", "Storage Used", "Favorites", "Recent"].map((label, idx) => (
                   <div key={idx} className="rounded-lg glass-effect bg-white text-card-foreground border-0 shadow-sm hover:shadow-lg transition-all duration-300">
                     <div className="p-4">
@@ -47,18 +55,16 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
-
               <div className="glass-effect rounded-2xl p-6 shadow-sm">
-                <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
-                  <div className="relative flex-1 max-w-md">
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                  <div className="relative flex-1 w-full max-w-md">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
                     <input
                       placeholder="Search files..."
                       className="pl-10 border border-slate-200 rounded-md w-full h-10 focus:border-indigo-300 focus:ring-indigo-200"
                     />
                   </div>
-
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
                     <div className="inline-flex bg-slate-100 rounded-md p-1">
                       {["All", "Favorites", "Images", "Documents"].map((tab, i) => (
                         <button
@@ -80,7 +86,6 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-
               <div className="glass-effect rounded-2xl p-6 shadow-sm">
                 <div className="text-center py-12">
                   <div className="w-16 h-16 mx-auto mb-4 bg-slate-100 rounded-full flex items-center justify-center">

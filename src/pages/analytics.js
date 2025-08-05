@@ -1,5 +1,6 @@
+// === MOBILE-SUPPORTED ANALYTICS.JSX ===
 import Head from "next/head";
-import { HardDrive, ChartColumn, TrendingUp, ChartPie } from "lucide-react";
+import { HardDrive, ChartColumn, TrendingUp, ChartPie, Menu } from "lucide-react";
 import Sidebar from "@/components/SideBar";
 import {
   LineChart,
@@ -10,8 +11,10 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useState } from "react";
 
 export default function Analytics() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const data = [
     { day: "Wed", uploads: 0 },
     { day: "Thu", uploads: 1 },
@@ -26,53 +29,49 @@ export default function Analytics() {
     <>
       <Head>
         <title>CloudVault | Analytics</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Head>
       <div className="flex">
-        <Sidebar active="analytics" />
-        <main className="flex-1 overflow-auto ml-64">
-          <div className="p-6 lg:p-8">
+        <Sidebar active="analytics" open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <main className="flex-1 overflow-auto md:ml-64">
+          <div className="px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex items-center justify-between mb-4 md:hidden">
+              <h1 className="text-xl font-bold">Analytics</h1>
+              <button onClick={() => setSidebarOpen(true)}>
+                <Menu className="w-6 h-6 text-slate-600" />
+              </button>
+            </div>
             <div className="max-w-7xl mx-auto space-y-8">
-              {/* Header */}
               <div>
                 <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
                   Storage Analytics
                 </h1>
                 <p className="text-slate-600 mt-1">Insights into your file storage usage</p>
               </div>
-
-              {/* Stat Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 {[
                   {
                     title: "Total Storage",
                     value: "0.00 MB",
                     subtitle: "0 files",
-                    icon: <HardDrive className="w-6 h-6 text-indigo-600" />,
-                    iconBg: "bg-indigo-100",
+                    icon: <HardDrive className="w-6 h-6 text-indigo-600" />, iconBg: "bg-indigo-100",
                   },
                   {
                     title: "Average File Size",
                     value: "0.00 MB",
                     subtitle: "per file",
-                    icon: <ChartColumn className="w-6 h-6 text-purple-600" />,
-                    iconBg: "bg-purple-100",
+                    icon: <ChartColumn className="w-6 h-6 text-purple-600" />, iconBg: "bg-purple-100",
                   },
                   {
                     title: "Growth Rate",
                     value: "+0",
                     subtitle: "files this week",
-                    icon: <TrendingUp className="w-6 h-6 text-green-600" />,
-                    iconBg: "bg-green-100",
+                    icon: <TrendingUp className="w-6 h-6 text-green-600" />, iconBg: "bg-green-100",
                   },
                 ].map(({ title, value, subtitle, icon, iconBg }, i) => (
-                  <div
-                    key={i}
-                    className="rounded-lg bg-card text-card-foreground glass-effect border-0 shadow-lg"
-                  >
+                  <div key={i} className="rounded-lg bg-card text-card-foreground glass-effect border-0 shadow-lg">
                     <div className="flex flex-col space-y-1.5 p-6 pb-3">
-                      <h3 className="tracking-tight text-sm font-medium text-slate-600">
-                        {title}
-                      </h3>
+                      <h3 className="tracking-tight text-sm font-medium text-slate-600">{title}</h3>
                     </div>
                     <div className="p-6 pt-0">
                       <div className="flex items-center gap-3">
@@ -86,10 +85,7 @@ export default function Analytics() {
                   </div>
                 ))}
               </div>
-
-              {/* Analytics Graphs */}
-              <div className="grid lg:grid-cols-2 gap-6">
-                {/* Upload Trend Line Chart */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="rounded-lg bg-card text-card-foreground glass-effect border-0 shadow-lg">
                   <div className="flex flex-col space-y-1.5 p-6">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">
@@ -98,26 +94,16 @@ export default function Analytics() {
                   </div>
                   <div className="p-6 pt-0">
                     <ResponsiveContainer width="100%" height={250}>
-                      <LineChart
-                        data={data}
-                        margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
-                      >
+                      <LineChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="day" />
                         <YAxis allowDecimals={false} />
                         <Tooltip />
-                        <Line
-                          type="monotone"
-                          dataKey="uploads"
-                          stroke="#6366f1"
-                          strokeWidth={2}
-                        />
+                        <Line type="monotone" dataKey="uploads" stroke="#6366f1" strokeWidth={2} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
-
-                {/* File Type Distribution Placeholder */}
                 <div className="rounded-lg bg-card text-card-foreground glass-effect border-0 shadow-lg">
                   <div className="flex flex-col space-y-1.5 p-6">
                     <h3 className="text-2xl font-semibold leading-none tracking-tight">

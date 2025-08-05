@@ -1,9 +1,34 @@
-import { FolderOpen, Upload, BarChart3, User, Cloud } from 'lucide-react';
+import { FolderOpen, Upload, BarChart3, User, Cloud, X } from 'lucide-react';
 import Link from 'next/link';
 
-export default function Sidebar({ active = '' }) {
+export default function Sidebar({ active = '', open = false, onClose = () => {} }) {
   return (
-    <div className="fixed inset-y-0 z-10 hidden h-screen w-64 bg-white/80 backdrop-blur-md border-r border-white/20 md:flex flex-col">
+    <>
+      {/* Desktop Sidebar */}
+      <div className="fixed inset-y-0 z-10 hidden md:flex h-screen w-64 bg-white/80 backdrop-blur-md border-r border-white/20 flex-col">
+        <SidebarContent active={active} />
+      </div>
+
+      {/* Mobile Sidebar Overlay */}
+      {open && (
+        <div className="fixed inset-0 z-30 bg-black/40 md:hidden" onClick={onClose}></div>
+      )}
+
+      {/* Mobile Sidebar Drawer */}
+      <div className={`fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out md:hidden ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex justify-between items-center p-4 border-b border-gray-200">
+          <h2 className="font-bold text-lg">CloudVault</h2>
+          <button onClick={onClose}><X className="w-5 h-5 text-gray-600" /></button>
+        </div>
+        <SidebarContent active={active} />
+      </div>
+    </>
+  );
+}
+
+function SidebarContent({ active }) {
+  return (
+    <>
       <div className="flex flex-col gap-2 border-b border-white/10 p-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -65,6 +90,6 @@ export default function Sidebar({ active = '' }) {
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
