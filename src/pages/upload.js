@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import { ArrowLeft, FolderOpen, Image, FileText, Video, Music, Menu } from "lucide-react";
 import Link from "next/link";
 import RequireAuth from "@/components/RequireAuth";
-import { apiFetch } from "@/lib/api";
+import { apiFetch } from "../pages/api/api";
 
 export default function Upload() {
   const fileInputRef = useRef(null);
