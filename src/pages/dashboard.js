@@ -1,13 +1,67 @@
 // src/pages/dashboard.js
 import Head from "next/head";
-import { Plus, Grid3x3, List, Search, Menu } from "lucide-react";
+import { Plus, Grid3x3, List, Search, Menu, Eye, Download, RefreshCw } from "lucide-react";
 import Sidebar from "@/components/SideBar";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import RequireAuth from "@/components/RequireAuth";
+import { getUser, getToken, apiFetch } from "./api/api";
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setUser(getUser());
+    refreshList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function refreshList() {
+    try {
+      setLoading(true);
+      setError("");
+      const token = getToken();
+      const data = await apiFetch("/api/files/list", {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      setItems(data.items || []);
+    } catch (e) {
+      setError(e.message || "Failed to load files");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function viewFile(key) {
+    try {
+      const token = getToken();
+      const { url } = await apiFetch(`/api/files/presign/view?key=${encodeURIComponent(key)}`, {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      window.open(url, "_blank");
+    } catch (e) {
+      alert(e.message || "Failed to view file");
+    }
+  }
+
+  async function downloadFile(key) {
+    try {
+      const token = getToken();
+      const { url } = await apiFetch(`/api/files/presign/download?key=${encodeURIComponent(key)}`, {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      window.location.href = url;
+    } catch (e) {
+      alert(e.message || "Failed to download file");
+    }
+  }
 
   return (
     <>
@@ -26,14 +80,20 @@ export default function Dashboard() {
                   <Menu className="w-6 h-6 text-slate-600" />
                 </button>
               </div>
+
               <div className="max-w-7xl mx-auto space-y-8">
+                {/* Greeting */}
+                <div>
+                  <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
+                    {user ? `Welcome, ${user.name}` : "Welcome to SecureVault"}
+                  </h1>
+                  <p className="text-slate-600 mt-1">
+                    {user ? `Signed in as ${user.email}` : "Manage and organize your files"}
+                  </p>
+                </div>
+
+                {/* CTA */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-                  <div>
-                    <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
-                      My Files
-                    </h1>
-                    <p className="text-slate-600 mt-1">Manage and organize your files</p>
-                  </div>
                   <Link href="/upload">
                     <button className="inline-flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl px-4 py-2 rounded-md h-10 font-medium text-sm transition-all duration-300">
                       <Plus className="w-4 h-4 mr-2" />
@@ -42,16 +102,22 @@ export default function Dashboard() {
                   </Link>
                 </div>
 
+                {/* Your original stat cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {["Total Files", "Storage Used", "Favorites", "Recent"].map((label, idx) => (
-                    <div key={idx} className="rounded-lg glass-effect bg-white text-card-foreground border-0 shadow-sm hover:shadow-lg transition-all duration-300">
+                    <div
+                      key={idx}
+                      className="rounded-lg glass-effect bg-white text-card-foreground border-0 shadow-sm hover:shadow-lg transition-all duration-300"
+                    >
                       <div className="p-4">
                         <div className="flex items-center gap-3">
                           <div className="p-2 rounded-lg bg-slate-100">
                             <Search className="w-5 h-5 text-slate-500" />
                           </div>
                           <div>
-                            <div className="text-lg font-bold text-slate-900">0</div>
+                            <div className="text-lg font-bold text-slate-900">
+                              {label === "Total Files" ? items.length : 0}
+                            </div>
                             <div className="text-sm text-slate-500">{label}</div>
                           </div>
                         </div>
@@ -60,6 +126,7 @@ export default function Dashboard() {
                   ))}
                 </div>
 
+                {/* Search / filters (unchanged) */}
                 <div className="glass-effect rounded-2xl p-6 shadow-sm">
                   <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                     <div className="relative flex-1 w-full max-w-md">
@@ -89,16 +156,64 @@ export default function Dashboard() {
                   </div>
                 </div>
 
+                {/* Files list */}
                 <div className="glass-effect rounded-2xl p-6 shadow-sm">
-                  <div className="text-center py-12">
-                    <div className="w-16 h-16 mx-auto mb-4 bg-slate-100 rounded-full flex items-center justify-center">
-                      <Search className="w-8 h-8 text-slate-400" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-slate-900 mb-2">No files found</h3>
-                    <p className="text-slate-500">Upload your first file to get started</p>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-slate-900">Your Files</h3>
+                    <button
+                      onClick={refreshList}
+                      className="inline-flex items-center gap-2 text-sm px-3 py-1.5 rounded-md border hover:bg-white"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Refresh
+                    </button>
                   </div>
-                </div>
 
+                  {error && <p className="text-red-500 text-sm mb-2">{error}</p>}
+
+                  {loading ? (
+                    <p className="text-slate-500">Loading…</p>
+                  ) : items.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 mx-auto mb-4 bg-slate-100 rounded-full flex items-center justify-center">
+                        <Search className="w-8 h-8 text-slate-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-slate-900 mb-2">No files found</h3>
+                      <p className="text-slate-500">Upload your first file to get started</p>
+                    </div>
+                  ) : (
+                    <ul className="divide-y">
+                      {items.map((it) => {
+                        const short = it.key.split("/").slice(-1)[0];
+                        return (
+                          <li key={it.key} className="py-3 flex items-center justify-between">
+                            <div className="min-w-0">
+                              <div className="font-medium text-slate-900 truncate">{short}</div>
+                              <div className="text-xs text-slate-500">
+                                {(it.size / 1024 / 1024).toFixed(2)} MB •{" "}
+                                {new Date(it.lastModified).toLocaleString()}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => viewFile(it.key)}
+                                className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white"
+                              >
+                                <Eye className="w-4 h-4" /> View
+                              </button>
+                              <button
+                                onClick={() => downloadFile(it.key)}
+                                className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white"
+                              >
+                                <Download className="w-4 h-4" /> Download
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
               </div>
             </div>
           </main>

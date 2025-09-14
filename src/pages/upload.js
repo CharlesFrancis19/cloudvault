@@ -1,22 +1,44 @@
 // src/pages/upload.jsx
 import Head from "next/head";
 import Sidebar from "@/components/SideBar";
-import { useRef, useState } from "react";
-import { ArrowLeft, FolderOpen, Image, FileText, Video, Music, Menu } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, FolderOpen, Image, FileText, Video, Music, Menu, Download, Eye } from "lucide-react";
 import Link from "next/link";
 import RequireAuth from "@/components/RequireAuth";
-import { apiFetch } from "../pages/api/api";
+import { apiFetch, getUser, getToken } from "../pages/api/api";
 
 export default function Upload() {
   const fileInputRef = useRef(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [status, setStatus] = useState({}); // fileName -> 'idle' | 'uploading' | 'done' | 'error'
+  const [user, setUserState] = useState(null);
+  const [token, setTokenState] = useState(null);
+  const [items, setItems] = useState([]);
+
+  useEffect(() => {
+    setUserState(getUser());
+    const t = getToken();
+    setTokenState(t);
+    if (t) refreshList(t);
+  }, []);
+
+  const refreshList = async (tok = token) => {
+    try {
+      const data = await apiFetch("/api/files/list", {
+        method: "GET",
+        headers: tok ? { Authorization: `Bearer ${tok}` } : undefined,
+      });
+      setItems(data.items || []);
+    } catch (e) {
+      console.error("List failed", e);
+    }
+  };
 
   const handleButtonClick = () => fileInputRef.current?.click();
 
   const handleFileChange = (e) => {
-    const files = Array.from(e.target.files);
+    const files = Array.from(e.target.files || []);
     setSelectedFiles(files);
     files.forEach(uploadOne);
   };
@@ -27,23 +49,56 @@ export default function Upload() {
     try {
       const presign = await apiFetch("/api/files/presign/upload", {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: {
           fileName: file.name,
           contentType: file.type || "application/octet-stream",
-          size: file.size
-        }
+          size: file.size,
+        },
       });
 
-      await fetch(presign.uploadUrl, {
+      const resp = await fetch(presign.uploadUrl, {
         method: "PUT",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: file
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+          "x-amz-server-side-encryption": "AES256", // match server presign
+        },
+        body: file,
       });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(`S3 upload failed: ${resp.status} ${resp.statusText} - ${text}`);
+      }
 
       setStatus((s) => ({ ...s, [key]: "done" }));
+      await refreshList();
     } catch (e) {
       console.error("Upload failed", e);
       setStatus((s) => ({ ...s, [key]: "error" }));
+    }
+  }
+
+  async function viewFile(key) {
+    try {
+      const { url } = await apiFetch(`/api/files/presign/view?key=${encodeURIComponent(key)}`, {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      window.open(url, "_blank");
+    } catch (e) {
+      console.error("View failed", e);
+    }
+  }
+
+  async function downloadFile(key) {
+    try {
+      const { url } = await apiFetch(`/api/files/presign/download?key=${encodeURIComponent(key)}`, {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      window.location.href = url;
+    } catch (e) {
+      console.error("Download failed", e);
     }
   }
 
@@ -73,9 +128,11 @@ export default function Upload() {
                   </Link>
                   <div>
                     <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
-                      Upload Files
+                      {user ? `Upload Files, ${user.name}` : "Upload Files"}
                     </h1>
-                    <p className="text-slate-600 mt-1">Add files to your storage</p>
+                    <p className="text-slate-600 mt-1">
+                      {user ? `Signed in as ${user.email}` : "Add files to your storage"}
+                    </p>
                   </div>
                 </div>
 
@@ -107,7 +164,7 @@ export default function Upload() {
                       { label: "Images", icon: Image, desc: "PNG, JPG, GIF" },
                       { label: "Documents", icon: FileText, desc: "PDF, DOC, TXT" },
                       { label: "Videos", icon: Video, desc: "MP4, AVI, MOV" },
-                      { label: "Audio", icon: Music, desc: "MP3, WAV, AAC" }
+                      { label: "Audio", icon: Music, desc: "MP3, WAV, AAC" },
                     ].map(({ label, icon: Icon, desc }, i) => (
                       <div key={i} className="text-center">
                         <div className="w-12 h-12 mx-auto mb-3 bg-white rounded-lg flex items-center justify-center shadow-sm border border-slate-200">
@@ -138,6 +195,43 @@ export default function Upload() {
                         ))}
                       </ul>
                     </div>
+                  )}
+                </div>
+
+                {/* Your files */}
+                <div className="glass-effect rounded-2xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-slate-900">Your Files</h3>
+                    <button onClick={() => refreshList()} className="text-sm px-3 py-1.5 rounded-md border hover:bg-white">
+                      Refresh
+                    </button>
+                  </div>
+                  {items.length === 0 ? (
+                    <p className="text-slate-500">No files uploaded yet.</p>
+                  ) : (
+                    <ul className="divide-y">
+                      {items.map((it) => {
+                        const short = it.key.split('/').slice(-1)[0];
+                        return (
+                          <li key={it.key} className="py-3 flex items-center justify-between">
+                            <div className="min-w-0">
+                              <div className="font-medium text-slate-900 truncate">{short}</div>
+                              <div className="text-xs text-slate-500">
+                                {(it.size / 1024 / 1024).toFixed(2)} MB • {new Date(it.lastModified).toLocaleString()}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => viewFile(it.key)} className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white">
+                                <Eye className="w-4 h-4" /> View
+                              </button>
+                              <button onClick={() => downloadFile(it.key)} className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white">
+                                <Download className="w-4 h-4" /> Download
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   )}
                 </div>
               </div>
