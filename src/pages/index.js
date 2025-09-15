@@ -17,17 +17,39 @@ export default function AuthPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Enable bypass in dev or when explicitly allowed via env
+  const allowBypass =
+    process.env.NEXT_PUBLIC_ADMIN_BYPASS === "true" ||
+    process.env.NODE_ENV !== "production";
+
+  const devBypassIfAdmin = async () => {
+    if (!allowBypass) return false;
+    const isAdminCreds = email.trim() === "admin" && password === "admin";
+    if (!isAdminCreds) return false;
+
+    // Create a fake admin session for local/dev
+    const fakeUser = { name: "Administrator", email: "admin@local", role: "admin" };
+    setAuth("dev-admin-token", fakeUser);
+    router.push("/dashboard"); // or "/admin" if you have an admin page
+    return true;
+  };
+
   const handleLogin = async () => {
     setError("");
     try {
       setSubmitting(true);
+
+      // Dev bypass: admin / admin
+      const usedBypass = await devBypassIfAdmin();
+      if (usedBypass) return;
+
       const normalizedEmail = email.toLowerCase().trim();
       const { accessToken, user } = await apiFetch("/login", {
         method: "POST",
         body: { email: normalizedEmail, password },
       });
       if (!accessToken) throw new Error("No access token returned");
-      // Save token + user (backend returns user on login)
+
       setAuth(accessToken, user);
       router.push("/dashboard");
     } catch (e) {
@@ -51,7 +73,7 @@ export default function AuthPage() {
         body: { name: cleanName, email: normalizedEmail, password },
       });
       if (!accessToken) throw new Error("No access token returned");
-      // Signup doesn’t return user, so persist from form
+
       setAuth(accessToken, { email: normalizedEmail, name: cleanName });
       router.push("/dashboard");
     } catch (e) {
@@ -89,10 +111,15 @@ export default function AuthPage() {
             <p className="text-slate-500 text-sm sm:text-base font-medium">
               {mode === "login" ? "Sign in to continue" : "Join SecureVault in seconds"}
             </p>
+            {allowBypass && (
+              <p className="text-xs text-slate-400">
+                Dev bypass enabled: use <span className="font-mono">admin / admin</span>
+              </p>
+            )}
           </div>
 
           {/* Form */}
-          <form className="w-full space-y-5" onSubmit={onSubmit}>
+          <form className="w-full space-y-5" onSubmit={onSubmit} noValidate>
             <div className="space-y-4">
               {mode === "signup" && (
                 <div className="space-y-1.5">
@@ -124,7 +151,7 @@ export default function AuthPage() {
                   <input
                     type="email"
                     id="email"
-                    placeholder="you@example.com"
+                    placeholder="you@example.com (or 'admin' in dev)"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -174,7 +201,7 @@ export default function AuthPage() {
                       required
                       value={confirm}
                       onChange={(e) => setConfirm(e.target.value)}
-                      className="pl-10 pr-10 h-11 sm:h-12 w-full bg-slate-50/50 border border-slate-200 focus:border-slate-400 rounded-xl placeholder:text-slate-400 text-sm"
+                      className="pl-10 pr-10 h-11 sm:h-12 w-full bg-slate-50/50 border border-slate-200 focus:border-slate-400 focus:ring-slate-400 rounded-xl placeholder:text-slate-400 text-sm"
                     />
                     <button
                       type="button"

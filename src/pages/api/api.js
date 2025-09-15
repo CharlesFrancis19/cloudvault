@@ -40,17 +40,18 @@ export function getUser() {
    API base + URL utilities
 ---------------------------- */
 function getApiBase() {
-  // Prefer BASE, then URL; finally a hardcoded dev fallback.
+  // Prefer BASE, then URL; fallback to same-origin /api (works with CloudFront behavior)
   const base =
     process.env.NEXT_PUBLIC_API_BASE ||
     process.env.NEXT_PUBLIC_API_URL ||
-    "http://3.87.108.144:8080";
+    "/api";
   return String(base).replace(/\/+$/, ""); // trim trailing slashes
 }
 
 function joinUrl(base, path) {
   const p = path.startsWith("/") ? path : `/${path}`;
-  return `${base}${p}`.replace(/(?<!:)\/{2,}/g, "/"); // collapse accidental //
+  // collapse accidental multiple slashes (but not after http(s):)
+  return `${base}${p}`.replace(/(?<!:)\/{2,}/g, "/");
 }
 
 /* ---------------------------
@@ -61,20 +62,18 @@ export async function apiFetch(pathOrUrl, options = {}) {
   const isAbsolute = /^https?:\/\//i.test(pathOrUrl);
   const url = isAbsolute ? pathOrUrl : joinUrl(base, pathOrUrl);
 
-  // Auto JSON headers, allow caller overrides
   const headers = {
     "Content-Type": "application/json",
     ...(options.headers || {}),
   };
 
-  // Auto Authorization unless explicitly disabled via { auth: false }
+  // Auto-attach Authorization unless explicitly disabled
   const wantAuth = options.auth !== false;
   const token = wantAuth ? getToken() : null;
   if (wantAuth && token && !headers.Authorization) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  // Stringify body if it's a plain object
   let body = options.body;
   if (body && typeof body === "object" && !(body instanceof FormData)) {
     body = JSON.stringify(body);
@@ -84,25 +83,17 @@ export async function apiFetch(pathOrUrl, options = {}) {
     method: options.method || "GET",
     headers,
     body,
-    credentials: options.credentials || "include", // harmless if JWT-only
+    credentials: options.credentials || "include",
     signal: options.signal,
   });
 
-  // Try to parse JSON (even on error)
-  let data = null;
   const text = await res.text();
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text || null;
-  }
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text || null; }
 
   if (!res.ok) {
-    // if unauthorized, clear local auth
     if (res.status === 401) clearAuth();
-    const msg =
-      (data && (data.error || data.message)) ||
-      `API error: ${res.status} ${res.statusText}`;
+    const msg = (data && (data.error || data.message)) || `API error: ${res.status} ${res.statusText}`;
     const err = new Error(msg);
     err.status = res.status;
     err.data = data;
@@ -119,7 +110,7 @@ export async function signup({ name, email, password }) {
   const data = await apiFetch("/signup", {
     method: "POST",
     body: { name, email, password },
-    auth: false, // no token yet
+    auth: false,
   });
   if (data?.accessToken) setAuth(data.accessToken, data.user);
   return data;
@@ -141,37 +132,34 @@ export function logout() {
 
 /* ---------------------------
    Files: stats, list
+   NOTE: base is /api, so paths below DO NOT start with /api
 ---------------------------- */
-// scope = 'me' (default) -> requires token
-// scope = 'all'          -> backend may allow without auth
 export async function fetchFileStats(scope = "me") {
   return apiFetch(`/files/stats?scope=${encodeURIComponent(scope)}`, {
-    // auth true by default; for 'all' you can disable if your backend doesn't need it
     auth: scope !== "all",
   });
 }
 
 export async function fetchFileList() {
-  // per-user list requires token
-  return apiFetch("/api/files/list");
+  return apiFetch("/files/list");
 }
 
 /* ---------------------------
    Presign helpers (S3)
 ---------------------------- */
 export async function presignUpload({ fileName, contentType }) {
-  return apiFetch("/api/files/presign/upload", {
+  return apiFetch("/files/presign/upload", {
     method: "POST",
     body: { fileName, contentType },
   });
 }
 
 export async function presignView({ key }) {
-  return apiFetch(`/api/files/presign/view?key=${encodeURIComponent(key)}`);
+  return apiFetch(`/files/presign/view?key=${encodeURIComponent(key)}`);
 }
 
 export async function presignDownload({ key }) {
-  return apiFetch(`/api/files/presign/download?key=${encodeURIComponent(key)}`);
+  return apiFetch(`/files/presign/download?key=${encodeURIComponent(key)}`);
 }
 
 /* ---------------------------
@@ -191,8 +179,7 @@ export async function uploadFileToS3(file) {
   });
 
   if (!putRes.ok) {
-    const msg = `S3 upload failed: ${putRes.status} ${putRes.statusText}`;
-    throw new Error(msg);
+    throw new Error(`S3 upload failed: ${putRes.status} ${putRes.statusText}`);
   }
 
   return { key };
