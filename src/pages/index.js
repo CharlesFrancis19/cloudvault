@@ -17,31 +17,30 @@ export default function AuthPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Enable bypass in dev or when explicitly allowed via env
-  const allowBypass =
-    process.env.NEXT_PUBLIC_ADMIN_BYPASS === "true" ||
-    process.env.NODE_ENV !== "production";
-
-  const devBypassIfAdmin = async () => {
-    if (!allowBypass) return false;
-    const isAdminCreds = email.trim() === "admin" && password === "admin";
-    if (!isAdminCreds) return false;
-
-    // Create a fake admin session for local/dev
-    const fakeUser = { name: "Administrator", email: "admin@local", role: "admin" };
-    setAuth("dev-admin-token", fakeUser);
-    router.push("/dashboard"); // or "/admin" if you have an admin page
-    return true;
-  };
+  // ---- DEV HOST BYPASS ----
+  const DEV_BYPASS_HOST = "cloudvault-2xhh.vercel.app";
+  function canBypass() {
+    if (typeof window === "undefined") return false;
+    return window.location.hostname === DEV_BYPASS_HOST;
+  }
+  // -------------------------
 
   const handleLogin = async () => {
     setError("");
     try {
       setSubmitting(true);
 
-      // Dev bypass: admin / admin
-      const usedBypass = await devBypassIfAdmin();
-      if (usedBypass) return;
+      // ---- DEV-ONLY BYPASS ----
+      if (canBypass() && email.trim() === "admin" && password === "admin") {
+        setAuth("DEV_FAKE_TOKEN", {
+          email: "admin@securevault.dev",
+          name: "Admin",
+          role: "admin",
+        });
+        router.push("/dashboard");
+        return;
+      }
+      // -------------------------
 
       const normalizedEmail = email.toLowerCase().trim();
       const { accessToken, user } = await apiFetch("/login", {
@@ -49,7 +48,7 @@ export default function AuthPage() {
         body: { email: normalizedEmail, password },
       });
       if (!accessToken) throw new Error("No access token returned");
-
+      // Save token + user (backend returns user on login)
       setAuth(accessToken, user);
       router.push("/dashboard");
     } catch (e) {
@@ -73,7 +72,7 @@ export default function AuthPage() {
         body: { name: cleanName, email: normalizedEmail, password },
       });
       if (!accessToken) throw new Error("No access token returned");
-
+      // Signup doesn’t return user, so persist from form
       setAuth(accessToken, { email: normalizedEmail, name: cleanName });
       router.push("/dashboard");
     } catch (e) {
@@ -111,11 +110,6 @@ export default function AuthPage() {
             <p className="text-slate-500 text-sm sm:text-base font-medium">
               {mode === "login" ? "Sign in to continue" : "Join SecureVault in seconds"}
             </p>
-            {allowBypass && (
-              <p className="text-xs text-slate-400">
-                Dev bypass enabled: use <span className="font-mono">admin / admin</span>
-              </p>
-            )}
           </div>
 
           {/* Form */}
@@ -149,9 +143,9 @@ export default function AuthPage() {
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <input
-                    type="email"
+                    type="text" // text to allow "admin"
                     id="email"
-                    placeholder="you@example.com (or 'admin' in dev)"
+                    placeholder="you@example.com"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
