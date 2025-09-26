@@ -1,105 +1,149 @@
 // src/pages/upload.jsx
 import Head from "next/head";
 import Sidebar from "@/components/SideBar";
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, FolderOpen, Image, FileText, Video, Music, Menu, Download, Eye } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  ArrowLeft,
+  FolderOpen,
+  Image,
+  FileText,
+  Video,
+  Music,
+  Menu,
+  Download,
+  Eye,
+  CheckCircle2,
+  X
+} from "lucide-react";
 import Link from "next/link";
 import RequireAuth from "@/components/RequireAuth";
-import { apiFetch, getUser, getToken } from "../pages/api/api";
+import { getUser, fetchFileList, presignView, presignDownload, uploadFileToS3 } from "@/lib/api";
 
 export default function Upload() {
   const fileInputRef = useRef(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [status, setStatus] = useState({}); // fileName -> 'idle' | 'uploading' | 'done' | 'error'
+  const [status, setStatus] = useState({});
   const [user, setUserState] = useState(null);
-  const [token, setTokenState] = useState(null);
   const [items, setItems] = useState([]);
+
+  // Success modal
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [successData, setSuccessData] = useState(null); // { key, name, size }
 
   useEffect(() => {
     setUserState(getUser());
-    const t = getToken();
-    setTokenState(t);
-    if (t) refreshList(t);
+    refreshList();
   }, []);
 
-  const refreshList = async (tok = token) => {
+  const refreshList = useCallback(async () => {
     try {
-      const data = await apiFetch("/api/files/list", {
-        method: "GET",
-        headers: tok ? { Authorization: `Bearer ${tok}` } : undefined,
-      });
+      const data = await fetchFileList();
       setItems(data.items || []);
     } catch (e) {
       console.error("List failed", e);
     }
-  };
+  }, []);
 
   const handleButtonClick = () => fileInputRef.current?.click();
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files || []);
-    setSelectedFiles(files);
+    setSelectedFiles((prev) => [...prev, ...files]);
     files.forEach(uploadOne);
   };
 
   async function uploadOne(file) {
-    const key = file.name;
-    setStatus((s) => ({ ...s, [key]: "uploading" }));
+    const keyDisplay = file.name;
+    setStatus((s) => ({ ...s, [keyDisplay]: "uploading" }));
     try {
-      const presign = await apiFetch("/api/files/presign/upload", {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        body: {
-          fileName: file.name,
-          contentType: file.type || "application/octet-stream",
-          size: file.size,
-        },
-      });
-
-      const resp = await fetch(presign.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-          "x-amz-server-side-encryption": "AES256", // match server presign
-        },
-        body: file,
-      });
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => "");
-        throw new Error(`S3 upload failed: ${resp.status} ${resp.statusText} - ${text}`);
-      }
-
-      setStatus((s) => ({ ...s, [key]: "done" }));
+      const res = await uploadFileToS3(file); // presign + PUT (+ SSE header) + notify
+      setStatus((s) => ({ ...s, [keyDisplay]: "done" }));
       await refreshList();
+
+      // Show success popup for this file
+      setSuccessData({ key: res?.key, name: file.name, size: file.size });
+      setSuccessOpen(true);
     } catch (e) {
       console.error("Upload failed", e);
-      setStatus((s) => ({ ...s, [key]: "error" }));
+      setStatus((s) => ({ ...s, [keyDisplay]: `error: ${e?.message || e}` }));
     }
   }
 
   async function viewFile(key) {
     try {
-      const { url } = await apiFetch(`/api/files/presign/view?key=${encodeURIComponent(key)}`, {
-        method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const { url } = await presignView({ key });
       window.open(url, "_blank");
     } catch (e) {
       console.error("View failed", e);
+      alert(`View failed: ${e?.message || e}`);
     }
   }
 
   async function downloadFile(key) {
     try {
-      const { url } = await apiFetch(`/api/files/presign/download?key=${encodeURIComponent(key)}`, {
-        method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const { url } = await presignDownload({ key });
       window.location.href = url;
     } catch (e) {
       console.error("Download failed", e);
+      alert(`Download failed: ${e?.message || e}`);
     }
+  }
+
+  // ===== Success Modal (inline component for convenience) =====
+  function SuccessModal({ open, data, onClose, onView }) {
+    if (!open || !data) return null;
+    const short = data.name || data.key?.split("/").slice(-1)[0];
+    const sizeMB = data.size != null ? (data.size / 1024 / 1024).toFixed(2) : null;
+
+    return (
+      <div className="fixed inset-0 z-50">
+        {/* Backdrop */}
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+        {/* Modal */}
+        <div className="absolute inset-0 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl glass-effect bg-white shadow-xl border border-slate-200">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-full bg-green-100">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-900">Upload complete</h3>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-1 rounded-md hover:bg-slate-100"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-1">
+              <div className="font-medium text-slate-900 truncate">{short}</div>
+              {sizeMB && (
+                <div className="text-xs text-slate-500">{sizeMB} MB</div>
+              )}
+            </div>
+
+            <div className="p-4 flex justify-end gap-2 border-t">
+              <button
+                onClick={() => onView?.(data.key)}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border hover:bg-white"
+              >
+                <Eye className="w-4 h-4" /> View
+              </button>
+              <button
+                onClick={onClose}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -128,7 +172,7 @@ export default function Upload() {
                   </Link>
                   <div>
                     <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
-                      {user ? `Upload Files, ${user.name}` : "Upload Files"}
+                      {user ? `Upload Files, ${user.name || user.email}` : "Upload Files"}
                     </h1>
                     <p className="text-slate-600 mt-1">
                       {user ? `Signed in as ${user.email}` : "Add files to your storage"}
@@ -148,7 +192,13 @@ export default function Upload() {
                     <h2 className="text-2xl font-bold text-slate-900 mb-3">Upload your files</h2>
                     <p className="text-lg text-slate-600 mb-6">Drag and drop files or click below</p>
 
-                    <input type="file" multiple ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+                    <input
+                      type="file"
+                      multiple
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
 
                     <button
                       onClick={handleButtonClick}
@@ -174,11 +224,6 @@ export default function Upload() {
                         <div className="text-xs text-slate-500">{desc}</div>
                       </div>
                     ))}
-                  </div>
-
-                  <div className="text-sm text-slate-500 space-y-1 px-6 pb-6">
-                    <p>Maximum file size: 50MB per file</p>
-                    <p>Supported formats: Images, Documents, Videos, Audio files</p>
                   </div>
 
                   {selectedFiles.length > 0 && (
@@ -211,7 +256,7 @@ export default function Upload() {
                   ) : (
                     <ul className="divide-y">
                       {items.map((it) => {
-                        const short = it.key.split('/').slice(-1)[0];
+                        const short = it.key.split("/").slice(-1)[0];
                         return (
                           <li key={it.key} className="py-3 flex items-center justify-between">
                             <div className="min-w-0">
@@ -221,10 +266,16 @@ export default function Upload() {
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <button onClick={() => viewFile(it.key)} className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white">
+                              <button
+                                onClick={() => viewFile(it.key)}
+                                className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white"
+                              >
                                 <Eye className="w-4 h-4" /> View
                               </button>
-                              <button onClick={() => downloadFile(it.key)} className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white">
+                              <button
+                                onClick={() => downloadFile(it.key)}
+                                className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white"
+                              >
                                 <Download className="w-4 h-4" /> Download
                               </button>
                             </div>
@@ -239,6 +290,14 @@ export default function Upload() {
           </main>
         </div>
       </RequireAuth>
+
+      {/* Upload success popup */}
+      <SuccessModal
+        open={successOpen}
+        data={successData}
+        onClose={() => setSuccessOpen(false)}
+        onView={(key) => viewFile(key)}
+      />
     </>
   );
 }

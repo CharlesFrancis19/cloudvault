@@ -2,12 +2,10 @@
 import Head from "next/head";
 import { HardDrive, ChartColumn, TrendingUp, ChartPie, Menu, RefreshCw } from "lucide-react";
 import Sidebar from "@/components/SideBar";
-import {
-  LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer
-} from "recharts";
+import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useState, useEffect, useMemo } from "react";
 import RequireAuth from "@/components/RequireAuth";
-import { getUser, getToken, apiFetch } from "./api/api";
+import { getUser, fetchFileList } from "@/lib/api";
 
 export default function Analytics() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -26,11 +24,7 @@ export default function Analytics() {
     try {
       setLoading(true);
       setErr("");
-      const token = getToken();
-      const data = await apiFetch("/api/files/list", {
-        method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const data = await fetchFileList(); // -> GET /files/list
       setItems(data.items || []);
     } catch (e) {
       setErr(e.message || "Failed to load analytics");
@@ -40,19 +34,12 @@ export default function Analytics() {
   }
 
   // ---- derived stats ----
-  const {
-    totalFiles,
-    totalBytes,
-    avgBytes,
-    growthCount,
-    chartData,
-  } = useMemo(() => {
+  const { totalFiles, totalBytes, avgBytes, growthCount, chartData } = useMemo(() => {
     const totalFiles = items.length;
     const totalBytes = items.reduce((sum, it) => sum + (it.size || 0), 0);
     const avgBytes = totalFiles ? totalBytes / totalFiles : 0;
 
-    // 7-day trend: Wed..Tue like your old sample, but generated from "today"
-    const dayLabels = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const now = new Date();
     const last7 = Array.from({ length: 7 }).map((_, idx) => {
       const d = new Date(now);
@@ -61,20 +48,16 @@ export default function Analytics() {
     });
 
     const counts = last7.map((day) => {
-      const dayStart = new Date(day); dayStart.setHours(0,0,0,0);
-      const dayEnd = new Date(day); dayEnd.setHours(23,59,59,999);
-      const c = items.filter(it => {
+      const dayStart = new Date(day); dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(day); dayEnd.setHours(23, 59, 59, 999);
+      const c = items.filter((it) => {
         const t = new Date(it.lastModified || it.LastModified || 0).getTime();
         return t >= dayStart.getTime() && t <= dayEnd.getTime();
       }).length;
       return { day, uploads: c };
     });
 
-    const chartData = counts.map(c => ({
-      day: dayLabels[c.day.getDay()],
-      uploads: c.uploads,
-    }));
-
+    const chartData = counts.map((c) => ({ day: dayLabels[c.day.getDay()], uploads: c.uploads }));
     const growthCount = counts.reduce((s, c) => s + c.uploads, 0);
 
     return { totalFiles, totalBytes, avgBytes, growthCount, chartData };
@@ -105,7 +88,7 @@ export default function Analytics() {
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
                     <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
-                      {user ? `Hello, ${user.name}` : "Storage Analytics"}
+                      {user ? `Hello, ${user.name || user.email}` : "Storage Analytics"}
                     </h1>
                     <p className="text-slate-600 mt-1">
                       {user ? `Signed in as ${user.email}` : "Insights into your file storage usage"}

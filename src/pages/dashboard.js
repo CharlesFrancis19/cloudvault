@@ -1,11 +1,12 @@
 // src/pages/dashboard.js
 import Head from "next/head";
-import { Plus, Grid3x3, List, Search, Menu, Eye, Download, RefreshCw } from "lucide-react";
+import { Plus, Grid3x3, List, Search, Menu, Eye, Download, RefreshCw, Trash2 } from "lucide-react";
 import Sidebar from "@/components/SideBar";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import RequireAuth from "@/components/RequireAuth";
-import { getUser, getToken, apiFetch } from "./api/api";
+import { getUser, fetchFileList, presignView, presignDownload, deleteFile } from "@/lib/api";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -13,6 +14,11 @@ export default function Dashboard() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // modal state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [toDeleteKey, setToDeleteKey] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     setUser(getUser());
@@ -24,11 +30,7 @@ export default function Dashboard() {
     try {
       setLoading(true);
       setError("");
-      const token = getToken();
-      const data = await apiFetch("/api/files/list", {
-        method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const data = await fetchFileList();
       setItems(data.items || []);
     } catch (e) {
       setError(e.message || "Failed to load files");
@@ -39,11 +41,7 @@ export default function Dashboard() {
 
   async function viewFile(key) {
     try {
-      const token = getToken();
-      const { url } = await apiFetch(`/api/files/presign/view?key=${encodeURIComponent(key)}`, {
-        method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const { url } = await presignView({ key });
       window.open(url, "_blank");
     } catch (e) {
       alert(e.message || "Failed to view file");
@@ -52,15 +50,38 @@ export default function Dashboard() {
 
   async function downloadFile(key) {
     try {
-      const token = getToken();
-      const { url } = await apiFetch(`/api/files/presign/download?key=${encodeURIComponent(key)}`, {
-        method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const { url } = await presignDownload({ key });
       window.location.href = url;
     } catch (e) {
       alert(e.message || "Failed to download file");
     }
+  }
+
+  // open the modal (no browser confirm)
+  function askDelete(key) {
+    setToDeleteKey(key);
+    setConfirmOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!toDeleteKey) return;
+    setDeleting(true);
+    try {
+      await deleteFile({ key: toDeleteKey });
+      setItems((prev) => prev.filter((it) => it.key !== toDeleteKey));
+      setConfirmOpen(false);
+      setToDeleteKey(null);
+    } catch (e) {
+      alert(e.message || "Failed to delete file");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function cancelDelete() {
+    if (deleting) return;
+    setConfirmOpen(false);
+    setToDeleteKey(null);
   }
 
   return (
@@ -85,7 +106,7 @@ export default function Dashboard() {
                 {/* Greeting */}
                 <div>
                   <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
-                    {user ? `Welcome, ${user.name}` : "Welcome to SecureVault"}
+                    {user ? `Welcome, ${user.name || user.email}` : "Welcome to SecureVault"}
                   </h1>
                   <p className="text-slate-600 mt-1">
                     {user ? `Signed in as ${user.email}` : "Manage and organize your files"}
@@ -102,7 +123,7 @@ export default function Dashboard() {
                   </Link>
                 </div>
 
-                {/* Your original stat cards */}
+                {/* Simple stat cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {["Total Files", "Storage Used", "Favorites", "Recent"].map((label, idx) => (
                     <div
@@ -126,7 +147,7 @@ export default function Dashboard() {
                   ))}
                 </div>
 
-                {/* Search / filters (unchanged) */}
+                {/* Search / filters */}
                 <div className="glass-effect rounded-2xl p-6 shadow-sm">
                   <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                     <div className="relative flex-1 w-full max-w-md">
@@ -207,6 +228,13 @@ export default function Dashboard() {
                               >
                                 <Download className="w-4 h-4" /> Download
                               </button>
+                              <button
+                                onClick={() => askDelete(it.key)}
+                                className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white text-red-600 border-red-200"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" /> Delete
+                              </button>
                             </div>
                           </li>
                         );
@@ -219,6 +247,23 @@ export default function Dashboard() {
           </main>
         </div>
       </RequireAuth>
+
+      {/* Confirm delete modal */}
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Delete file"
+        message={
+          toDeleteKey
+            ? `Delete “${toDeleteKey.split("/").slice(-1)[0]}”? This cannot be undone.`
+            : "Delete this file? This cannot be undone."
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        danger
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
     </>
   );
 }

@@ -2,7 +2,7 @@
 import { FolderOpen, Upload, BarChart3, User, Cloud, X, LogOut } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getUser, clearAuth, fetchFileStats } from "../pages/api/api";
+import { getUser, clearAuth, fetchFileStats } from "@/lib/api";
 import { useRouter } from "next/router";
 
 export default function Sidebar({

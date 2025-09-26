@@ -1,8 +1,8 @@
 // src/lib/api.js
 
-/* ---------------------------
+/* ================================
    Auth storage (browser-safe)
----------------------------- */
+================================= */
 export function setAuth(token, user) {
   if (typeof window !== "undefined") {
     if (token) localStorage.setItem("sv_token", token);
@@ -32,9 +32,9 @@ export function getUser() {
   return null;
 }
 
-/* ---------------------------
-   API base + URL utilities
----------------------------- */
+/* ================================
+   API base + URL helpers
+================================= */
 function getApiBase() {
   const base =
     process.env.NEXT_PUBLIC_API_BASE ||
@@ -48,18 +48,21 @@ function joinUrl(base, path) {
   return `${base}${p}`.replace(/(?<!:)\/{2,}/g, "/");
 }
 
-/* ---------------------------
+/* ================================
    Core fetch wrapper
----------------------------- */
+================================= */
 export async function apiFetch(pathOrUrl, options = {}) {
   const base = getApiBase();
   const isAbsolute = /^https?:\/\//i.test(pathOrUrl);
   const url = isAbsolute ? pathOrUrl : joinUrl(base, pathOrUrl);
 
-  const headers = {
-    "Content-Type": "application/json",
-    ...(options.headers || {}),
-  };
+  const headers = { ...(options.headers || {}) };
+
+  const hasJsonBody =
+    options.body && typeof options.body === "object" && !(options.body instanceof FormData);
+  if (hasJsonBody && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
 
   const wantAuth = options.auth !== false;
   const token = wantAuth ? getToken() : null;
@@ -68,15 +71,13 @@ export async function apiFetch(pathOrUrl, options = {}) {
   }
 
   let body = options.body;
-  if (body && typeof body === "object" && !(body instanceof FormData)) {
-    body = JSON.stringify(body);
-  }
+  if (hasJsonBody) body = JSON.stringify(body);
 
   const res = await fetch(url, {
     method: options.method || "GET",
     headers,
     body,
-    credentials: options.credentials || "include",
+    credentials: options.credentials ?? "include",
     signal: options.signal,
   });
 
@@ -86,25 +87,30 @@ export async function apiFetch(pathOrUrl, options = {}) {
 
   if (!res.ok) {
     if (res.status === 401) clearAuth();
-    const msg = (data && (data.error || data.message)) || `API error: ${res.status} ${res.statusText}`;
+    const msg =
+      (data && (data.error || data.message)) ||
+      `API error: ${res.status} ${res.statusText}`;
     const err = new Error(msg);
     err.status = res.status;
     err.data = data;
+    err.raw = text;
     throw err;
   }
 
   return data ?? {};
 }
 
-/* ---------------------------
-   Auth (Cognito email OTP + MFA)
----------------------------- */
+/* ================================
+   Auth endpoints (Cognito-backed)
+================================= */
 export async function signup({ name, email, password }) {
-  return apiFetch("/signup", {
+  const data = await apiFetch("/signup", {
     method: "POST",
     body: { name, email, password },
     auth: false,
   });
+  if (data?.accessToken) setAuth(data.accessToken, data.user);
+  return data;
 }
 
 export async function resendConfirmation({ email }) {
@@ -119,22 +125,6 @@ export async function confirmSignup({ email, code, password }) {
   return apiFetch("/confirm-signup", {
     method: "POST",
     body: { email, code, password },
-    auth: false,
-  });
-}
-
-export async function mfaSetupStart({ session, email }) {
-  return apiFetch("/mfa/setup/start", {
-    method: "POST",
-    body: { session, email },
-    auth: false,
-  });
-}
-
-export async function mfaSetupVerify({ email, code, session }) {
-  return apiFetch("/mfa/setup/verify", {
-    method: "POST",
-    body: { email, code, session },
     auth: false,
   });
 }
@@ -159,32 +149,75 @@ export async function loginMfa({ email, code, session, challengeName }) {
   return data;
 }
 
+export async function mfaSetupStart({ session, email }) {
+  return apiFetch("/mfa/setup/start", {
+    method: "POST",
+    body: { session, email },
+    auth: false,
+  });
+}
+
+export async function mfaSetupVerify({ email, code, session }) {
+  return apiFetch("/mfa/setup/verify", {
+    method: "POST",
+    body: { email, code, session },
+    auth: false,
+  });
+}
+
 export function logout() { clearAuth(); }
 
-/* ---------------------------
-   Files (with SQS upload queue)
----------------------------- */
+/* ================================
+   Files: list + stats
+================================= */
 export async function fetchFileList() {
   return apiFetch("/files/list");
 }
-export async function presignView({ key }) {
-  return apiFetch(`/files/presign/view?key=${encodeURIComponent(key)}`);
+
+export async function fetchFileStats(scope = "me") {
+  try {
+    return await apiFetch(`/files/stats?scope=${encodeURIComponent(scope)}`);
+  } catch (e) {
+    if (e?.status === 404) {
+      const data = await fetchFileList();
+      const items = Array.isArray(data?.items) ? data.items : [];
+      const totalBytes = items.reduce((acc, it) => acc + (Number(it.size) || 0), 0);
+      return {
+        count: items.length,
+        totalBytes,
+        totalMB: +(totalBytes / (1024 * 1024)).toFixed(2),
+        scope,
+        computed: true,
+      };
+    }
+    throw e;
+  }
 }
-export async function presignDownload({ key }) {
-  return apiFetch(`/files/presign/download?key=${encodeURIComponent(key)}`);
-}
+
+/* ================================
+   Presigned S3 helpers (+ SQS notify)
+================================= */
 export async function presignUpload({ fileName, contentType, size }) {
   return apiFetch("/files/presign/upload", {
     method: "POST",
     body: { fileName, contentType, size },
   });
 }
-export async function notifyUpload({ key, size = 0 }) {
-  return apiFetch("/files/notify-upload", {
-    method: "POST",
-    body: { key, size },
+
+export async function presignView({ key }) {
+  return apiFetch(`/files/presign/view?key=${encodeURIComponent(key)}`);
+}
+
+export async function presignDownload({ key }) {
+  return apiFetch(`/files/presign/download?key=${encodeURIComponent(key)}`);
+}
+
+export async function deleteFile({ key }) {
+  return apiFetch(`/files/delete?key=${encodeURIComponent(key)}`, {
+    method: "DELETE",
   });
 }
+
 export async function uploadFileToS3(file) {
   const { name, type, size } = file;
   const { uploadUrl, key } = await presignUpload({
@@ -195,18 +228,33 @@ export async function uploadFileToS3(file) {
 
   const putRes = await fetch(uploadUrl, {
     method: "PUT",
-    headers: { "Content-Type": type || "application/octet-stream" },
+    headers: {
+      "Content-Type": type || "application/octet-stream",
+      "x-amz-server-side-encryption": "AES256", // Must match server presign
+    },
     body: file,
+    credentials: "omit",
   });
-  if (!putRes.ok) throw new Error(`S3 upload failed: ${putRes.status} ${putRes.statusText}`);
 
-  await notifyUpload({ key, size: size || 0 });
+  if (!putRes.ok) {
+    let bodyText = "";
+    try { bodyText = await putRes.text(); } catch {}
+    throw new Error(
+      `S3 upload failed: ${putRes.status} ${putRes.statusText} ${bodyText || ""}`.trim()
+    );
+  }
+
+  await apiFetch("/files/notify-upload", {
+    method: "POST",
+    body: { key, size: size || 0 },
+  });
+
   return { key };
 }
 
-/* ---------------------------
-   Health
----------------------------- */
+/* ================================
+   Health check
+================================= */
 export async function health() {
   return apiFetch("/health", { auth: false });
 }
