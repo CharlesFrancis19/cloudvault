@@ -1,0 +1,52 @@
+name: Deploy static Next.js to S3+CF
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # needed for OIDC
+  contents: read    # to checkout the repo
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Next.js 15: requires output:'export' in next.config.js
+      - name: Build (creates ./out)
+        run: npm run build
+
+      - name: Verify build output exists
+        run: |
+          if [ ! -d "out" ]; then
+            echo "❌ Build output folder 'out' not found. Ensure next.config.js has output:'export'."
+            exit 1
+          fi
+          echo "✅ Found ./out"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::342448511865:role/github
+          role-session-name: github-${{ github.run_id }}
+
+      - name: Sync to S3
+        run: aws s3 sync ./out s3://secure-frontend --delete
+
+      - name: Invalidate CloudFront
+        run: aws cloudfront create-invalidation --distribution-id E262KDHQ4EAJQX --paths "/*"
