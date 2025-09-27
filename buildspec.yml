@@ -1,0 +1,26 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      - echo "Installing dependencies..."
+      - npm ci
+  build:
+    commands:
+      - echo "Building Next.js static export..."
+      - npm run build:static   # runs next build && next export → ./out
+  post_build:
+    commands:
+      - echo "Deploying to S3..."
+      - aws s3 sync ./out "s3://secure-frontend" --delete
+      - echo "Invalidating CloudFront cache..."
+      - aws cloudfront create-invalidation \
+          --distribution-id E262KDHQ4EAJQX \
+          --paths "/*"
+
+artifacts:
+  files:
+    - '**/*'
+  base-directory: out
