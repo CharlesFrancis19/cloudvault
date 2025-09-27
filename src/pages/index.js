@@ -227,7 +227,7 @@ export default function AuthPage() {
     if (mode === "confirm") return "Confirm your email";
     if (mode === "setup") return "Set up your Authenticator";
     if (mode === "challenge") return "Verify your code";
-    return "Welcome back";
+    return "Welcome daaa lusu";
   })();
 
   const sub = (() => {
