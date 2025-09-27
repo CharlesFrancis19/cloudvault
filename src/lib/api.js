@@ -195,12 +195,27 @@ export async function fetchFileStats(scope = "me") {
 }
 
 /* ================================
+   Crypto helpers (browser)
+================================= */
+/** Compute SHA-256 hex digest of a File/Blob */
+export async function fileSha256Hex(file) {
+  const buf = await file.arrayBuffer();
+  const hash = await crypto.subtle.digest("SHA-256", buf);
+  const bytes = new Uint8Array(hash);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/* ================================
    Presigned S3 helpers (+ SQS notify)
 ================================= */
-export async function presignUpload({ fileName, contentType, size }) {
+/**
+ * Request a presigned PUT URL.
+ * Server REQUIRES sha256 for gating — pass it explicitly.
+ */
+export async function presignUpload({ fileName, contentType, size, sha256 }) {
   return apiFetch("/files/presign/upload", {
     method: "POST",
-    body: { fileName, contentType, size },
+    body: { fileName, contentType, size, sha256 },
   });
 }
 
@@ -218,19 +233,33 @@ export async function deleteFile({ key }) {
   });
 }
 
+/**
+ * High-level upload:
+ * 1) hash file (sha256)
+ * 2) presign with sha256
+ * 3) PUT to S3
+ * 4) notify backend with sha256
+ */
 export async function uploadFileToS3(file) {
   const { name, type, size } = file;
+
+  // 1) Compute sha256 (required by server)
+  const sha256 = await fileSha256Hex(file);
+
+  // 2) Presign (includes sha256)
   const { uploadUrl, key } = await presignUpload({
     fileName: name,
     contentType: type || "application/octet-stream",
     size: size || 0,
+    sha256,
   });
 
+  // 3) Upload to S3
   const putRes = await fetch(uploadUrl, {
     method: "PUT",
     headers: {
       "Content-Type": type || "application/octet-stream",
-      "x-amz-server-side-encryption": "AES256", // Must match server presign
+      "x-amz-server-side-encryption": "AES256", // must match presign
     },
     body: file,
     credentials: "omit",
@@ -244,12 +273,13 @@ export async function uploadFileToS3(file) {
     );
   }
 
+  // 4) Notify (include sha256 for defense-in-depth)
   await apiFetch("/files/notify-upload", {
     method: "POST",
-    body: { key, size: size || 0 },
+    body: { key, size: size || 0, sha256 },
   });
 
-  return { key };
+  return { key, sha256 };
 }
 
 /* ================================

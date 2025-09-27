@@ -43,12 +43,50 @@ function SidebarContent({ active, onClose, isMobile = false }) {
   const [stats, setStats] = useState({ totalFiles: 0, totalBytes: 0 });
   const router = useRouter();
 
+  // --- Keep user in sync with localStorage & tab focus ---
   useEffect(() => {
-    setUserState(getUser());
+    const readUser = () => setUserState(getUser());
 
-    // Load per-user stats from S3 via backend
-    fetchFileStats('me')
-      .then((data) => setStats({ totalFiles: data.totalFiles || 0, totalBytes: data.totalBytes || 0 }))
+    // initial read
+    readUser();
+
+    // update when localStorage changes (other tabs or same tab)
+    const onStorage = (e) => {
+      if (!e || e.key === null || e.key === "sv_user" || e.key === "sv_token") {
+        readUser();
+      }
+    };
+
+    // update when window refocuses / visibility toggles
+    const onFocus = () => readUser();
+    const onVisibility = () => document.visibilityState === "visible" && readUser();
+
+    // optional custom event if your auth layer dispatches it
+    const onAuthChanged = () => readUser();
+
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("sv_auth_changed", onAuthChanged);
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("sv_auth_changed", onAuthChanged);
+    };
+  }, []);
+
+  // --- Load per-user stats from backend; normalize shape ---
+  useEffect(() => {
+    fetchFileStats("me")
+      .then((data) => {
+        const totalFiles = data?.totalFiles ?? data?.count ?? 0;
+        const totalBytes =
+          data?.totalBytes ??
+          (typeof data?.totalMB === "number" ? Math.max(0, Math.round(data.totalMB * 1024 * 1024)) : 0);
+        setStats({ totalFiles, totalBytes });
+      })
       .catch((e) => {
         console.error("Stats load failed:", e);
         setStats({ totalFiles: 0, totalBytes: 0 });
@@ -57,7 +95,10 @@ function SidebarContent({ active, onClose, isMobile = false }) {
 
   const handleLogout = () => {
     clearAuth();
+    setUserState(null); // reflect immediately
     router.push("/");
+    // Optional: if you want other components to react, dispatch a custom event
+    try { window.dispatchEvent(new Event("sv_auth_changed")); } catch {}
   };
 
   const totalFiles = stats.totalFiles || 0;
@@ -140,14 +181,14 @@ function SidebarContent({ active, onClose, isMobile = false }) {
           <div className="w-9 h-9 bg-gradient-to-r from-slate-400 to-slate-600 rounded-full flex items-center justify-center">
             <User className="w-5 h-5 text-white" />
           </div>
-        </div>
-        <div className="min-w-0">
-          <p className="font-semibold text-slate-900 text-sm truncate">
-            {user?.name || "Guest"}
-          </p>
-          <p className="text-xs text-slate-500 truncate">
-            {user?.email || "Not signed in"}
-          </p>
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-900 text-sm truncate">
+              {user?.name || user?.email || "Guest"}
+            </p>
+            <p className="text-xs text-slate-500 truncate">
+              {user?.email || (user ? "" : "Not signed in")}
+            </p>
+          </div>
         </div>
 
         <button

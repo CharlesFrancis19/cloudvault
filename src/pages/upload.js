@@ -29,7 +29,11 @@ export default function Upload() {
 
   // Success modal
   const [successOpen, setSuccessOpen] = useState(false);
-  const [successData, setSuccessData] = useState(null); // { key, name, size }
+  const [successData, setSuccessData] = useState(null);
+
+  // Error modal
+  const [errorOpen, setErrorOpen] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
     setUserState(getUser());
@@ -55,18 +59,27 @@ export default function Upload() {
 
   async function uploadOne(file) {
     const keyDisplay = file.name;
-    setStatus((s) => ({ ...s, [keyDisplay]: "uploading" }));
+    setStatus((s) => ({ ...s, [keyDisplay]: "checking…" }));
     try {
-      const res = await uploadFileToS3(file); // presign + PUT (+ SSE header) + notify
+      const res = await uploadFileToS3(file); // now pre-checks before uploading
       setStatus((s) => ({ ...s, [keyDisplay]: "done" }));
       await refreshList();
-
-      // Show success popup for this file
-      setSuccessData({ key: res?.key, name: file.name, size: file.size });
+      setSuccessData({ key: res?.key, name: file.name, size: file.size, hash: res?.hash });
       setSuccessOpen(true);
     } catch (e) {
       console.error("Upload failed", e);
-      setStatus((s) => ({ ...s, [keyDisplay]: `error: ${e?.message || e}` }));
+      if (e?.code === "MALICIOUS_FILE") {
+        setStatus((s) => ({ ...s, [keyDisplay]: "blocked (malicious)" }));
+        setErrorMsg(
+          `“${file.name}” was blocked because its contents match a known malicious sample.\n` +
+          `The file was NOT uploaded.`
+        );
+        setErrorOpen(true);
+      } else {
+        setStatus((s) => ({ ...s, [keyDisplay]: `error: ${e?.message || e}` }));
+        setErrorMsg(`Upload failed: ${e?.message || e}`);
+        setErrorOpen(true);
+      }
     }
   }
 
@@ -76,7 +89,8 @@ export default function Upload() {
       window.open(url, "_blank");
     } catch (e) {
       console.error("View failed", e);
-      alert(`View failed: ${e?.message || e}`);
+      setErrorMsg(`View failed: ${e?.message || e}`);
+      setErrorOpen(true);
     }
   }
 
@@ -86,11 +100,11 @@ export default function Upload() {
       window.location.href = url;
     } catch (e) {
       console.error("Download failed", e);
-      alert(`Download failed: ${e?.message || e}`);
+      setErrorMsg(`Download failed: ${e?.message || e}`);
+      setErrorOpen(true);
     }
   }
 
-  // ===== Success Modal (inline component for convenience) =====
   function SuccessModal({ open, data, onClose, onView }) {
     if (!open || !data) return null;
     const short = data.name || data.key?.split("/").slice(-1)[0];
@@ -98,9 +112,7 @@ export default function Upload() {
 
     return (
       <div className="fixed inset-0 z-50">
-        {/* Backdrop */}
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-        {/* Modal */}
         <div className="absolute inset-0 flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-2xl glass-effect bg-white shadow-xl border border-slate-200">
             <div className="flex items-center justify-between p-4 border-b">
@@ -110,34 +122,55 @@ export default function Upload() {
                 </div>
                 <h3 className="text-lg font-semibold text-slate-900">Upload complete</h3>
               </div>
-              <button
-                onClick={onClose}
-                className="p-1 rounded-md hover:bg-slate-100"
-                aria-label="Close"
-              >
+              <button onClick={onClose} className="p-1 rounded-md hover:bg-slate-100" aria-label="Close">
                 <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
 
             <div className="p-4 space-y-1">
               <div className="font-medium text-slate-900 truncate">{short}</div>
-              {sizeMB && (
-                <div className="text-xs text-slate-500">{sizeMB} MB</div>
-              )}
+              {sizeMB && <div className="text-xs text-slate-500">{sizeMB} MB</div>}
+              {data?.hash && <div className="text-[10px] text-slate-400 break-all mt-1">SHA-256: {data.hash}</div>}
             </div>
 
             <div className="p-4 flex justify-end gap-2 border-t">
-              <button
-                onClick={() => onView?.(data.key)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border hover:bg-white"
-              >
+              <button onClick={() => onView?.(data.key)} className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border hover:bg-white">
                 <Eye className="w-4 h-4" /> View
               </button>
-              <button
-                onClick={onClose}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
-              >
+              <button onClick={onClose} className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function ErrorModal({ open, title = "Upload blocked", message, onClose }) {
+    if (!open) return null;
+    return (
+      <div className="fixed inset-0 z-50">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+        <div className="absolute inset-0 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-red-200">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-full bg-red-100">
+                  <X className="w-5 h-5 text-red-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-red-700">{title}</h3>
+              </div>
+              <button onClick={onClose} className="p-1 rounded-md hover:bg-slate-100" aria-label="Close">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{message}</p>
+            </div>
+            <div className="p-4 border-t flex justify-end">
+              <button onClick={onClose} className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md text-white bg-red-600 hover:bg-red-700">
+                Okay
               </button>
             </div>
           </div>
@@ -266,16 +299,10 @@ export default function Upload() {
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => viewFile(it.key)}
-                                className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white"
-                              >
+                              <button onClick={() => viewFile(it.key)} className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white">
                                 <Eye className="w-4 h-4" /> View
                               </button>
-                              <button
-                                onClick={() => downloadFile(it.key)}
-                                className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white"
-                              >
+                              <button onClick={() => downloadFile(it.key)} className="inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border hover:bg-white">
                                 <Download className="w-4 h-4" /> Download
                               </button>
                             </div>
@@ -291,12 +318,17 @@ export default function Upload() {
         </div>
       </RequireAuth>
 
-      {/* Upload success popup */}
       <SuccessModal
         open={successOpen}
         data={successData}
         onClose={() => setSuccessOpen(false)}
         onView={(key) => viewFile(key)}
+      />
+
+      <ErrorModal
+        open={errorOpen}
+        message={errorMsg}
+        onClose={() => setErrorOpen(false)}
       />
     </>
   );

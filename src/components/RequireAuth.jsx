@@ -9,7 +9,7 @@ export default function RequireAuth({ children }) {
   useEffect(() => {
     const token = getToken();
     if (!token) {
-      router.replace("/auth");
+      router.replace("/");
     }
   }, [router]);
 
@@ -21,7 +21,7 @@ export function LogoutButton() {
   const router = useRouter();
   const onLogout = () => {
     clearAuth();
-    router.push("/auth");
+    router.push("/");
   };
   return (
     <button
